@@ -254,7 +254,7 @@ const SOUND_VOLUMES = {
   FIRE_CRACKLE: 0.10,       // Fire tower beam (continuous)
   
   // Knight sounds
-  SWORD_CLASH: 0.002,        // Metal sword impact (plays frequently)
+  SWORD_CLASH: 0.0002,        // Metal sword impact (plays frequently)
   
   // Mine/trap sounds
   STICKY_SPLAT: 0.05,       // Gooey sticky mine
@@ -5447,3 +5447,4 @@ function keyPressed() {
     }
   }
 }
+
