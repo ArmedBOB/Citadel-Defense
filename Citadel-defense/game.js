@@ -239,6 +239,248 @@ const baseSize = 2; // Base occupies 2x2
 // Sprite cache
 let sprites = {};
 
+// Sound System
+let audioContext;
+let soundEnabled = true;
+
+// ===== SOUND VOLUME CONFIGURATION =====
+// Adjust these values to change sound volumes (0.0 = silent, 1.0 = max)
+// Lower values recommended for frequently-playing sounds
+const SOUND_VOLUMES = {
+  // Tower sounds
+  ARCHER_WHOOSH: 0.002,      // Arrow flight sound (plays frequently)
+  ARCHER_RELEASE: 0.0001,     // Bow string release (plays frequently)
+  MAGE_ZAP: 0.15,           // Electric "zzzt" sound
+  FIRE_CRACKLE: 0.10,       // Fire tower beam (continuous)
+  
+  // Knight sounds
+  SWORD_CLASH: 0.002,        // Metal sword impact (plays frequently)
+  
+  // Mine/trap sounds
+  STICKY_SPLAT: 0.05,       // Gooey sticky mine
+  EXPLOSION_BOOM: 0.10      // Explosion mine blast
+};
+// ==========================================
+
+function initAudioContext() {
+  if (!audioContext) {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  }
+}
+
+// Sound generation functions
+function playArrowSound() {
+  if (!soundEnabled || !audioContext) return;
+  
+  // APPROVED: Thwick Arrow - Option 3
+  const osc = audioContext.createOscillator();
+  
+  // Create noise buffer for bow release
+  const bufferSize = audioContext.sampleRate * 0.05;
+  const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = Math.random() * 2 - 1;
+  }
+  
+  const noiseSource = audioContext.createBufferSource();
+  noiseSource.buffer = buffer;
+  
+  const gain1 = audioContext.createGain();
+  const gain2 = audioContext.createGain();
+  const filter = audioContext.createBiquadFilter();
+  
+  osc.connect(gain1);
+  noiseSource.connect(filter);
+  filter.connect(gain2);
+  gain1.connect(audioContext.destination);
+  gain2.connect(audioContext.destination);
+  
+  // Thwick sound
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(1800, audioContext.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(600, audioContext.currentTime + 0.08);
+  
+  filter.type = 'bandpass';
+  filter.frequency.setValueAtTime(1500, audioContext.currentTime);
+  
+  gain1.gain.setValueAtTime(SOUND_VOLUMES.ARCHER_WHOOSH, audioContext.currentTime);
+  gain1.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+  
+  // Initial release burst
+  gain2.gain.setValueAtTime(SOUND_VOLUMES.ARCHER_RELEASE, audioContext.currentTime);
+  gain2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.05);
+  
+  osc.start(audioContext.currentTime);
+  noiseSource.start(audioContext.currentTime);
+  osc.stop(audioContext.currentTime + 0.1);
+  noiseSource.stop(audioContext.currentTime + 0.05);
+}
+
+function playMageSound() {
+  if (!soundEnabled || !audioContext) return;
+  
+  // APPROVED: Sizzling Arc - Option 2
+  // High-frequency sizzle with breaks - "zzzt-zt-zt"
+  const bufferSize = audioContext.sampleRate * 0.1;
+  const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+  const data = buffer.getChannelData(0);
+  
+  // Create sizzling pattern with gaps
+  for (let i = 0; i < bufferSize; i++) {
+    const cycle = Math.floor(i / 200); // Create gaps every 200 samples
+    if (cycle % 3 === 0 || cycle % 3 === 1) {
+      // Sizzle active
+      data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+    } else {
+      // Brief gap
+      data[i] = 0;
+    }
+  }
+  
+  const noise = audioContext.createBufferSource();
+  noise.buffer = buffer;
+  
+  const filter = audioContext.createBiquadFilter();
+  filter.type = 'highpass';
+  filter.frequency.setValueAtTime(3000, audioContext.currentTime);
+  
+  const gain = audioContext.createGain();
+  noise.connect(filter);
+  filter.connect(gain);
+  gain.connect(audioContext.destination);
+  
+  gain.gain.setValueAtTime(SOUND_VOLUMES.MAGE_ZAP, audioContext.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+  
+  noise.start(audioContext.currentTime);
+  noise.stop(audioContext.currentTime + 0.1);
+}
+
+function playSwordClashSound() {
+  if (!soundEnabled || !audioContext) return;
+  
+  // APPROVED: Metallic Ping - Refined Option 5
+  // Short, bright metallic impact
+  const osc1 = audioContext.createOscillator();
+  const osc2 = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+  
+  osc1.connect(gain);
+  osc2.connect(gain);
+  gain.connect(audioContext.destination);
+  
+  osc1.type = 'sine';
+  osc1.frequency.setValueAtTime(2800, audioContext.currentTime);
+  
+  osc2.type = 'sine';
+  osc2.frequency.setValueAtTime(1900, audioContext.currentTime);
+  
+  gain.gain.setValueAtTime(SOUND_VOLUMES.SWORD_CLASH, audioContext.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.08);
+  
+  osc1.start(audioContext.currentTime);
+  osc2.start(audioContext.currentTime);
+  osc1.stop(audioContext.currentTime + 0.08);
+  osc2.stop(audioContext.currentTime + 0.08);
+}
+
+function playFireSound() {
+  if (!soundEnabled || !audioContext) return;
+  
+  // Create pink noise for fire
+  const bufferSize = audioContext.sampleRate * 0.3;
+  const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+  const data = buffer.getChannelData(0);
+  
+  let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+  for (let i = 0; i < bufferSize; i++) {
+    const white = Math.random() * 2 - 1;
+    b0 = 0.99886 * b0 + white * 0.0555179;
+    b1 = 0.99332 * b1 + white * 0.0750759;
+    b2 = 0.96900 * b2 + white * 0.1538520;
+    b3 = 0.86650 * b3 + white * 0.3104856;
+    b4 = 0.55000 * b4 + white * 0.5329522;
+    b5 = -0.7616 * b5 - white * 0.0168980;
+    data[i] = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
+    data[i] *= 0.11;
+    b6 = white * 0.115926;
+  }
+  
+  const noise = audioContext.createBufferSource();
+  noise.buffer = buffer;
+  
+  const filter = audioContext.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(800, audioContext.currentTime);
+  
+  const gain = audioContext.createGain();
+  
+  noise.connect(filter);
+  filter.connect(gain);
+  gain.connect(audioContext.destination);
+  
+  gain.gain.setValueAtTime(SOUND_VOLUMES.FIRE_CRACKLE, audioContext.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+  
+  noise.start(audioContext.currentTime);
+  noise.stop(audioContext.currentTime + 0.3);
+}
+
+function playStickySound() {
+  if (!soundEnabled || !audioContext) return;
+  
+  const osc = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+  
+  osc.connect(gain);
+  gain.connect(audioContext.destination);
+  
+  // Gooey splat - low wobbling frequency
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(150, audioContext.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(80, audioContext.currentTime + 0.25);
+  
+  gain.gain.setValueAtTime(SOUND_VOLUMES.STICKY_SPLAT, audioContext.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.25);
+  
+  osc.start(audioContext.currentTime);
+  osc.stop(audioContext.currentTime + 0.25);
+}
+
+function playExplosionSound() {
+  if (!soundEnabled || !audioContext) return;
+  
+  // Create noise for soft explosion
+  const bufferSize = audioContext.sampleRate * 0.4;
+  const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+  const data = buffer.getChannelData(0);
+  
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = Math.random() * 2 - 1;
+  }
+  
+  const noise = audioContext.createBufferSource();
+  noise.buffer = buffer;
+  
+  const filter = audioContext.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(400, audioContext.currentTime);
+  filter.frequency.exponentialRampToValueAtTime(100, audioContext.currentTime + 0.3);
+  
+  const gain = audioContext.createGain();
+  
+  noise.connect(filter);
+  filter.connect(gain);
+  gain.connect(audioContext.destination);
+  
+  gain.gain.setValueAtTime(SOUND_VOLUMES.EXPLOSION_BOOM, audioContext.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.35);
+  
+  noise.start(audioContext.currentTime);
+  noise.stop(audioContext.currentTime + 0.4);
+}
+
 // Preload Sir Tut sprite image
 function preload() {
   // Try to load Sir Tut sprite, but don't block if it fails
@@ -3584,13 +3826,13 @@ function drawUI() {
     // Only show upgrade button if tier 2 is unlocked
     if (tier2Unlocked) {
       if (upgradeMode) {
-        // Active - yellow
+        // Active - Gold
         fill(255, 215, 0);
-        stroke(255, 215, 0);
+        stroke(255, 235, 100);
       } else {
-        // Available - dark yellow
-        fill(184, 134, 11);
-        stroke(184, 134, 11);
+        // Available - dark green
+        fill(180, 150, 0);
+        stroke(220, 185, 0);
       }
       strokeWeight(2);
       rect(UI_UPGRADE_X, UI_UPGRADE_Y, UI_UPGRADE_W, UI_UPGRADE_H, 6);
@@ -3953,6 +4195,9 @@ function updatePlaying() {
           nearestEnemy.health -= knight.damage;
           knight.attackCooldown = knight.attackSpeed;
           
+          // Play sword clash sound
+          playSwordClashSound();
+          
           // Hit particles
           for (let i = 0; i < 8; i++) {
             particles.push({
@@ -4081,6 +4326,9 @@ function updatePlaying() {
             size: def.puddleSize
           });
           
+          // Play sticky/gooey sound
+          playStickySound();
+          
           // Green goo explosion particles
           for (let i = 0; i < 40; i++) {
             let angle = random(TWO_PI);
@@ -4106,6 +4354,9 @@ function updatePlaying() {
               if (e.health <= 0) gold += e.goldReward;
             }
           }
+          
+          // Play soft explosion sound
+          playExplosionSound();
           
           // SPECTACULAR EXPLOSION EFFECT
           // Fire burst particles
@@ -4267,6 +4518,14 @@ function updatePlaying() {
       // Apply continuous damage to targets - FULL damage per beam
       let damagePerFrame = (tower.dps || TOWER_TYPES.fire.dps) / 60;
       
+      // Play fire sound occasionally (every 20 frames = ~3 times per second)
+      if (!tower.fireSoundCooldown) tower.fireSoundCooldown = 0;
+      if (tower.fireSoundCooldown <= 0 && (tower.target || tower.target2)) {
+        playFireSound();
+        tower.fireSoundCooldown = 20;
+      }
+      tower.fireSoundCooldown--;
+      
       // Damage first target
       if (tower.target) {
         tower.target.health -= damagePerFrame * speedMultiplier;
@@ -4379,6 +4638,13 @@ function updatePlaying() {
           stunDuration: tower.stunDuration || 12,
           chainMax: tower.chainMax || TOWER_TYPES[tower.type].chainMax
         });
+        
+        // Play arrow sound for archer towers
+        if (tower.type === 'archer' || tower.type === 'turret') {
+          playArrowSound();
+        } else if (tower.type === 'mage') {
+          playMageSound();
+        }
         
         // MUZZLE FLASH EFFECTS
         if (tower.type === 'turret' || tower.type === 'archer') {
@@ -4849,6 +5115,9 @@ function canPlaceTower(gridX, gridY, towerType) {
 }
 
 function mousePressed() {
+  // Initialize audio context on first user interaction (browser requirement)
+  initAudioContext();
+  
   // Handle tutorial Next button click
   if (tutorialActive && window.tutorialNextButton) {
     let btn = window.tutorialNextButton;
